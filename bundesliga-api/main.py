@@ -1,181 +1,106 @@
 """
-Vereine-API (Bundesliga / 2. Bundesliga / 3. Liga)
-==================================================
+Fügt alle 56 Vereine der Saison 2026/27 per POST zur laufenden API hinzu.
 
-Eine kleine REST-API mit FastAPI, die Fußballvereine verwaltet.
-Unterstützt die vier gängigen CRUD-Operationen nach REST-Konventionen:
+Benutzung:
+  1. BASE_URL unten auf deine Render-Adresse setzen (ohne / am Ende),
+     z. B. "https://vereine-api-xxxx.onrender.com"
+  2. Optional WIPE_FIRST = True setzen, wenn vorher alle vorhandenen
+     Vereine gelöscht werden sollen (verhindert Doppelte).
+  3. Ausführen:  python add_clubs.py
 
-    GET    /clubs            -> alle Vereine auflisten (optional ?league= Filter)
-    GET    /clubs/{id}       -> einen Verein abrufen
-    POST   /clubs            -> neuen Verein anlegen        (201 Created)
-    PUT    /clubs/{id}       -> einen Verein komplett ändern (200 OK)
-    DELETE /clubs/{id}       -> einen Verein löschen        (204 No Content)
-
-Zusätzlich wird unter "/" eine kleine Handy-Web-App ausgeliefert und
-unter "/docs" die automatische Swagger-Oberfläche von FastAPI.
+Hinweis: Auf dem kostenlosen Render-Plan liegen die Daten nur im
+Arbeitsspeicher. Nach einem Neustart sind sie wieder weg – dann dieses
+Skript erneut laufen lassen (oder die Vereine fest in main.py eintragen).
 """
 
-from enum import Enum
-from pathlib import Path
+import requests
 
-from fastapi import FastAPI, HTTPException, Response, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+BASE_URL = "https://DEINE-URL.onrender.com"   # <-- hier anpassen!
+WIPE_FIRST = False                            # True = vorher alles löschen
 
-BASE_DIR = Path(__file__).resolve().parent
-
-app = FastAPI(
-    title="Vereine-API",
-    description="REST-API für Vereine der Bundesliga, 2. Bundesliga und 3. Liga.",
-    version="1.0.0",
-)
-
-# CORS erlauben, damit auch externe Web-Apps die API nutzen können.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ---------------------------------------------------------------------------
-# Datenmodelle
-# ---------------------------------------------------------------------------
-class League(str, Enum):
-    """Erlaubte Ligen. So kann nur ein gültiger Wert gespeichert werden."""
-
-    bundesliga = "Bundesliga"
-    bundesliga2 = "2. Bundesliga"
-    liga3 = "3. Liga"
-
-
-class ClubIn(BaseModel):
-    """Felder, die beim Anlegen/Ändern mitgeschickt werden (ohne id)."""
-
-    name: str = Field(..., min_length=1, examples=["FC Bayern München"])
-    league: League = Field(..., examples=["Bundesliga"])
-    city: str | None = Field(None, examples=["München"])
-    stadium: str | None = Field(None, examples=["Allianz Arena"])
-    founded: int | None = Field(None, ge=1800, le=2100, examples=[1900])
-
-
-class Club(ClubIn):
-    """Verein inklusive seiner id (so wird er nach außen zurückgegeben)."""
-
-    id: int
-
-
-# ---------------------------------------------------------------------------
-# "Datenbank": einfacher Speicher im Arbeitsspeicher
-# ---------------------------------------------------------------------------
-# Hinweis: Diese Daten liegen nur im RAM. Bei einem Neustart des Servers
-# (auf Render-Free passiert das z. B. nach Inaktivität) werden sie wieder
-# auf diese Startliste zurückgesetzt. Für die Übung reicht das völlig.
-_clubs: dict[int, Club] = {}
-_next_id = 1
-
-
-def _add_seed(name: str, league: League, city: str, stadium: str, founded: int) -> None:
-    global _next_id
-    _clubs[_next_id] = Club(
-        id=_next_id, name=name, league=league, city=city, stadium=stadium, founded=founded
-    )
-    _next_id += 1
+CLUBS = [
+    # Bundesliga (18)
+    ("FC Augsburg", "Bundesliga", "Augsburg", "WWK Arena", 1907),
+    ("1. FC Union Berlin", "Bundesliga", "Berlin", "Stadion An der Alten Försterei", 1966),
+    ("SV Werder Bremen", "Bundesliga", "Bremen", "Weserstadion", 1899),
+    ("Borussia Dortmund", "Bundesliga", "Dortmund", "Signal Iduna Park", 1909),
+    ("SV Elversberg", "Bundesliga", "Spiesen-Elversberg", "Ursapharm-Arena an der Kaiserlinde", 1907),
+    ("Eintracht Frankfurt", "Bundesliga", "Frankfurt am Main", "Deutsche Bank Park", 1899),
+    ("SC Freiburg", "Bundesliga", "Freiburg im Breisgau", "Europa-Park Stadion", 1904),
+    ("Hamburger SV", "Bundesliga", "Hamburg", "Volksparkstadion", 1887),
+    ("TSG 1899 Hoffenheim", "Bundesliga", "Sinsheim", "PreZero Arena", 1899),
+    ("1. FC Köln", "Bundesliga", "Köln", "RheinEnergieStadion", 1948),
+    ("RB Leipzig", "Bundesliga", "Leipzig", "Red Bull Arena", 2009),
+    ("Bayer 04 Leverkusen", "Bundesliga", "Leverkusen", "BayArena", 1904),
+    ("1. FSV Mainz 05", "Bundesliga", "Mainz", "MEWA Arena", 1905),
+    ("Borussia Mönchengladbach", "Bundesliga", "Mönchengladbach", "Borussia-Park", 1900),
+    ("FC Bayern München", "Bundesliga", "München", "Allianz Arena", 1900),
+    ("SC Paderborn 07", "Bundesliga", "Paderborn", "Home Deluxe Arena", 1907),
+    ("FC Schalke 04", "Bundesliga", "Gelsenkirchen", "Veltins-Arena", 1904),
+    ("VfB Stuttgart", "Bundesliga", "Stuttgart", "MHPArena", 1893),
+    # 2. Bundesliga (18)
+    ("Hertha BSC", "2. Bundesliga", "Berlin", "Olympiastadion", 1892),
+    ("Arminia Bielefeld", "2. Bundesliga", "Bielefeld", "Schüco-Arena", 1905),
+    ("VfL Bochum", "2. Bundesliga", "Bochum", "Vonovia Ruhrstadion", 1848),
+    ("Eintracht Braunschweig", "2. Bundesliga", "Braunschweig", "Eintracht-Stadion", 1895),
+    ("FC Energie Cottbus", "2. Bundesliga", "Cottbus", "LEAG Energie Stadion", 1963),
+    ("SV Darmstadt 98", "2. Bundesliga", "Darmstadt", "Merck-Stadion am Böllenfalltor", 1898),
+    ("SG Dynamo Dresden", "2. Bundesliga", "Dresden", "Rudolf-Harbig-Stadion", 1953),
+    ("SpVgg Greuther Fürth", "2. Bundesliga", "Fürth", "Sportpark Ronhof Thomas Sommer", 1903),
+    ("Hannover 96", "2. Bundesliga", "Hannover", "Heinz von Heiden Arena", 1896),
+    ("1. FC Heidenheim 1846", "2. Bundesliga", "Heidenheim an der Brenz", "Voith-Arena", 1846),
+    ("1. FC Kaiserslautern", "2. Bundesliga", "Kaiserslautern", "Fritz-Walter-Stadion", 1900),
+    ("Karlsruher SC", "2. Bundesliga", "Karlsruhe", "BBBank Wildpark", 1894),
+    ("Holstein Kiel", "2. Bundesliga", "Kiel", "Holstein-Stadion", 1900),
+    ("1. FC Magdeburg", "2. Bundesliga", "Magdeburg", "Avnet Arena", 1965),
+    ("1. FC Nürnberg", "2. Bundesliga", "Nürnberg", "Max-Morlock-Stadion", 1900),
+    ("VfL Osnabrück", "2. Bundesliga", "Osnabrück", "Stadion an der Bremer Brücke", 1899),
+    ("FC St. Pauli", "2. Bundesliga", "Hamburg", "Millerntor-Stadion", 1910),
+    ("VfL Wolfsburg", "2. Bundesliga", "Wolfsburg", "Volkswagen Arena", 1945),
+    # 3. Liga (20)
+    ("Alemannia Aachen", "3. Liga", "Aachen", "Tivoli", 1900),
+    ("MSV Duisburg", "3. Liga", "Duisburg", "Schauinsland-Reisen-Arena", 1902),
+    ("Fortuna Düsseldorf", "3. Liga", "Düsseldorf", "Merkur Spiel-Arena", 1895),
+    ("Rot-Weiss Essen", "3. Liga", "Essen", "Stadion an der Hafenstraße", 1907),
+    ("SG Sonnenhof Großaspach", "3. Liga", "Aspach", "WIRmachenDRUCK Arena", 1994),
+    ("TSV Havelse", "3. Liga", "Garbsen", "Eilenriedestadion", 1912),
+    ("TSG 1899 Hoffenheim II", "3. Liga", "Sinsheim", "Dietmar-Hopp-Stadion", 1899),
+    ("FC Ingolstadt 04", "3. Liga", "Ingolstadt", "Audi Sportpark", 2004),
+    ("SC Fortuna Köln", "3. Liga", "Köln", "Südstadion", 1948),
+    ("FC Viktoria Köln", "3. Liga", "Köln", "Sportpark Höhenberg", 1904),
+    ("SV Waldhof Mannheim", "3. Liga", "Mannheim", "Carl-Benz-Stadion", 1907),
+    ("SV Meppen", "3. Liga", "Meppen", "Hänsch-Arena", 1912),
+    ("SC Preußen Münster", "3. Liga", "Münster", "Preußenstadion", 1906),
+    ("SSV Jahn Regensburg", "3. Liga", "Regensburg", "Jahnstadion Regensburg", 1907),
+    ("FC Hansa Rostock", "3. Liga", "Rostock", "Ostseestadion", 1965),
+    ("1. FC Saarbrücken", "3. Liga", "Saarbrücken", "Ludwigsparkstadion", 1903),
+    ("VfB Stuttgart II", "3. Liga", "Stuttgart", "WIRmachenDRUCK Arena", 1893),
+    ("SC Verl", "3. Liga", "Verl", "Sportclub Arena", 1924),
+    ("SV Wehen Wiesbaden", "3. Liga", "Wiesbaden", "BRITA-Arena", 1926),
+    ("Würzburger Kickers", "3. Liga", "Würzburg", "Akon Arena", 1907),
+]
 
 
-# Beispiel-/Startdaten (anpassbar über die API) – ein paar bekannte Vereine je Liga.
-_add_seed("FC Bayern München", League.bundesliga, "München", "Allianz Arena", 1900)
-_add_seed("Borussia Dortmund", League.bundesliga, "Dortmund", "Signal Iduna Park", 1909)
-_add_seed("RB Leipzig", League.bundesliga, "Leipzig", "Red Bull Arena", 2009)
-_add_seed("Bayer 04 Leverkusen", League.bundesliga, "Leverkusen", "BayArena", 1904)
-_add_seed("VfB Stuttgart", League.bundesliga, "Stuttgart", "MHPArena", 1893)
-_add_seed("Eintracht Frankfurt", League.bundesliga, "Frankfurt am Main", "Deutsche Bank Park", 1899)
+def main():
+    base = BASE_URL.rstrip("/")
 
-_add_seed("Hamburger SV", League.bundesliga2, "Hamburg", "Volksparkstadion", 1887)
-_add_seed("1. FC Köln", League.bundesliga2, "Köln", "RheinEnergieStadion", 1948)
-_add_seed("FC Schalke 04", League.bundesliga2, "Gelsenkirchen", "Veltins-Arena", 1904)
-_add_seed("Hertha BSC", League.bundesliga2, "Berlin", "Olympiastadion", 1892)
-_add_seed("1. FC Nürnberg", League.bundesliga2, "Nürnberg", "Max-Morlock-Stadion", 1900)
+    if WIPE_FIRST:
+        existing = requests.get(f"{base}/clubs").json()
+        for club in existing:
+            requests.delete(f"{base}/clubs/{club['id']}")
+        print(f"{len(existing)} vorhandene Vereine gelöscht.")
 
-_add_seed("Dynamo Dresden", League.liga3, "Dresden", "Rudolf-Harbig-Stadion", 1953)
-_add_seed("TSV 1860 München", League.liga3, "München", "Grünwalder Stadion", 1860)
-_add_seed("Rot-Weiss Essen", League.liga3, "Essen", "Stadion an der Hafenstraße", 1907)
-_add_seed("Arminia Bielefeld", League.liga3, "Bielefeld", "SchücoArena", 1905)
-
-
-# ---------------------------------------------------------------------------
-# API-Endpunkte
-# ---------------------------------------------------------------------------
-@app.get("/clubs", response_model=list[Club], tags=["clubs"], summary="Alle Vereine")
-def list_clubs(league: League | None = None):
-    """Gibt alle Vereine zurück. Mit `?league=Bundesliga` kann gefiltert werden."""
-    clubs = list(_clubs.values())
-    if league is not None:
-        clubs = [c for c in clubs if c.league == league]
-    return clubs
+    ok = 0
+    for name, league, city, stadium, founded in CLUBS:
+        body = {"name": name, "league": league, "city": city,
+                "stadium": stadium, "founded": founded}
+        r = requests.post(f"{base}/clubs", json=body)
+        if r.status_code == 201:
+            ok += 1
+        else:
+            print(f"Fehler bei {name}: {r.status_code} {r.text}")
+    print(f"Fertig: {ok}/{len(CLUBS)} Vereine angelegt.")
 
 
-@app.get("/clubs/{club_id}", response_model=Club, tags=["clubs"], summary="Einen Verein")
-def get_club(club_id: int):
-    """Gibt genau einen Verein anhand seiner id zurück (404, falls nicht vorhanden)."""
-    club = _clubs.get(club_id)
-    if club is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verein nicht gefunden")
-    return club
-
-
-@app.post(
-    "/clubs",
-    response_model=Club,
-    status_code=status.HTTP_201_CREATED,
-    tags=["clubs"],
-    summary="Verein anlegen",
-)
-def create_club(data: ClubIn, response: Response):
-    """Legt einen neuen Verein an und liefert ihn mit neuer id zurück (201 Created)."""
-    global _next_id
-    club = Club(id=_next_id, **data.model_dump())
-    _clubs[_next_id] = club
-    # REST-Konvention: Location-Header zeigt auf die neue Ressource.
-    response.headers["Location"] = f"/clubs/{_next_id}"
-    _next_id += 1
-    return club
-
-
-@app.put("/clubs/{club_id}", response_model=Club, tags=["clubs"], summary="Verein ändern")
-def update_club(club_id: int, data: ClubIn):
-    """Ersetzt die Daten eines bestehenden Vereins komplett (404, falls nicht vorhanden)."""
-    if club_id not in _clubs:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verein nicht gefunden")
-    club = Club(id=club_id, **data.model_dump())
-    _clubs[club_id] = club
-    return club
-
-
-@app.delete(
-    "/clubs/{club_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    tags=["clubs"],
-    summary="Verein löschen",
-)
-def delete_club(club_id: int):
-    """Löscht einen Verein (204 No Content). 404, falls die id nicht existiert."""
-    if club_id not in _clubs:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verein nicht gefunden")
-    del _clubs[club_id]
-    # Bei 204 wird bewusst kein Body zurückgegeben.
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ---------------------------------------------------------------------------
-# Handy-Web-App (Bonus) unter "/" ausliefern
-# ---------------------------------------------------------------------------
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-
-
-@app.get("/", include_in_schema=False)
-def index():
-    return FileResponse(BASE_DIR / "static" / "index.html")
+if __name__ == "__main__":
+    main()

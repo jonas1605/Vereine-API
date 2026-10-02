@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vereine-Verwaltung</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --ink: #16191d;
+    --ink-soft: #5c636d;
+    --line: #e5e8ec;
+    --accent: #0a7d3f;          /* Rasengrün für Hauptaktionen */
+    --accent-ink: #ffffff;
+    --danger: #c0372b;
+    --shadow: 0 1px 2px rgba(16,19,23,.06), 0 8px 24px rgba(16,19,23,.06);
+    /* Liga-Farben, nur zum schnellen Scannen */
+    --l1: #c8102e; --l1-bg: #fdeaec;
+    --l2: #1d4ed8; --l2-bg: #e8eefc;
+    --l3: #b45309; --l3-bg: #fbf0e2;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 16px 120px; }
+
+  header {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--ink); color: #fff;
+    margin: 0 -16px 16px; padding: 18px 16px 14px;
+  }
+  header .inner { max-width: 560px; margin: 0 auto; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; font-weight: 650; }
+  header p { margin: 2px 0 0; font-size: 13px; color: #aab3bd; }
+
+  /* Liga-Filter (segmentiert) */
+  .filters { display: flex; gap: 6px; overflow-x: auto; margin: 14px 0 6px; padding-bottom: 2px; }
+  .filters button {
+    flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink-soft); padding: 9px 14px; border-radius: 999px;
+    font-size: 14px; font-weight: 550; cursor: pointer; white-space: nowrap;
+  }
+  .filters button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .count { font-size: 13px; color: var(--ink-soft); margin: 4px 2px 10px; }
+
+  ul#list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 14px 14px 12px;
+  }
+  .card .top { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+  .card h3 { margin: 0; font-size: 16.5px; font-weight: 640; letter-spacing: -.01em; }
+  .meta { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+  .badge {
+    flex: 0 0 auto; font-size: 11.5px; font-weight: 650; padding: 4px 9px; border-radius: 999px;
+  }
+  .badge.l1 { color: var(--l1); background: var(--l1-bg); }
+  .badge.l2 { color: var(--l2); background: var(--l2-bg); }
+  .badge.l3 { color: var(--l3); background: var(--l3-bg); }
+
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button {
+    flex: 1; border-radius: 10px; padding: 9px; font-size: 14px; font-weight: 580;
+    cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  .actions .del { color: var(--danger); border-color: #f0d6d3; }
+
+  .empty { text-align: center; color: var(--ink-soft); padding: 48px 20px; }
+  .empty strong { display: block; color: var(--ink); margin-bottom: 4px; }
+
+  /* Schwebender Hinzufügen-Button */
+  .fab {
+    position: fixed; right: max(16px, env(safe-area-inset-right)); z-index: 20;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    background: var(--accent); color: var(--accent-ink); border: none;
+    height: 56px; padding: 0 22px; border-radius: 999px; font-size: 16px; font-weight: 620;
+    box-shadow: 0 6px 20px rgba(10,125,63,.35); cursor: pointer;
+  }
+
+  /* Formular-Sheet */
+  .sheet-bg {
+    position: fixed; inset: 0; background: rgba(16,19,23,.45); z-index: 30;
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .sheet-bg.open { display: flex; }
+  .sheet {
+    background: var(--surface); width: 100%; max-width: 560px;
+    border-radius: 18px 18px 0 0; padding: 18px 18px calc(20px + env(safe-area-inset-bottom,0px));
+    max-height: 90vh; overflow-y: auto;
+  }
+  .sheet h2 { margin: 2px 0 14px; font-size: 18px; }
+  label { display: block; font-size: 13px; color: var(--ink-soft); margin: 12px 0 5px; }
+  input, select {
+    width: 100%; padding: 12px; font-size: 16px; border: 1px solid var(--line);
+    border-radius: 10px; background: #fff; color: var(--ink); font-family: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .sheet .save {
+    width: 100%; margin-top: 20px; background: var(--accent); color: #fff; border: none;
+    padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 620; cursor: pointer;
+  }
+  .sheet .cancel {
+    width: 100%; margin-top: 8px; background: transparent; color: var(--ink-soft); border: none;
+    padding: 10px; font-size: 14px; cursor: pointer;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(90px + env(safe-area-inset-bottom,0px)); z-index: 40;
+    background: var(--ink); color: #fff; padding: 11px 16px; border-radius: 10px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90%;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <h1>Vereine-Verwaltung</h1>
+    <p>Bundesliga · 2. Bundesliga · 3. Liga</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="filters" id="filters">
+    <button data-league="" aria-pressed="true">Alle</button>
+    <button data-league="Bundesliga" aria-pressed="false">Bundesliga</button>
+    <button data-league="2. Bundesliga" aria-pressed="false">2. Bundesliga</button>
+    <button data-league="3. Liga" aria-pressed="false">3. Liga</button>
+  </div>
+  <div class="count" id="count">Lade…</div>
+  <ul id="list"></ul>
+</div>
+
+<button class="fab" id="addBtn">+ Verein</button>
+
+<div class="sheet-bg" id="sheetBg">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 id="sheetTitle">Verein hinzufügen</h2>
+    <input type="hidden" id="f-id" />
+    <label for="f-name">Name</label>
+    <input id="f-name" placeholder="z. B. SC Freiburg" />
+    <label for="f-league">Liga</label>
+    <select id="f-league">
+      <option>Bundesliga</option>
+      <option>2. Bundesliga</option>
+      <option>3. Liga</option>
+    </select>
+    <div class="row">
+      <div>
+        <label for="f-city">Stadt</label>
+        <input id="f-city" placeholder="Freiburg" />
+      </div>
+      <div>
+        <label for="f-founded">Gegründet</label>
+        <input id="f-founded" type="number" inputmode="numeric" placeholder="1904" />
+      </div>
+    </div>
+    <label for="f-stadium">Stadion</label>
+    <input id="f-stadium" placeholder="Europa-Park Stadion" />
+    <button class="save" id="saveBtn">Speichern</button>
+    <button class="cancel" id="cancelBtn">Abbrechen</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // Gleiche Herkunft wie die API -> relative URL, kein CORS nötig.
+  // Falls du das Frontend getrennt hostest, hier die volle API-URL eintragen:
+  const API = "";
+
+  const listEl = document.getElementById("list");
+  const countEl = document.getElementById("count");
+  const sheetBg = document.getElementById("sheetBg");
+  let currentLeague = "";
+  let clubs = [];
+
+  const LEAGUE_CLASS = { "Bundesliga": "l1", "2. Bundesliga": "l2", "3. Liga": "l3" };
+
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  async function loadClubs() {
+    const url = API + "/clubs" + (currentLeague ? "?league=" + encodeURIComponent(currentLeague) : "");
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.status);
+      clubs = await res.json();
+      render();
+    } catch (e) {
+      countEl.textContent = "";
+      listEl.innerHTML = '<div class="empty"><strong>Verbindung fehlgeschlagen</strong>Läuft die API? Prüfe die Adresse und versuch es erneut.</div>';
+    }
+  }
+
+  function render() {
+    countEl.textContent = clubs.length + (clubs.length === 1 ? " Verein" : " Vereine");
+    if (clubs.length === 0) {
+      listEl.innerHTML = '<div class="empty"><strong>Noch nichts hier</strong>Tippe auf „+ Verein", um den ersten anzulegen.</div>';
+      return;
+    }
+    listEl.innerHTML = "";
+    for (const c of clubs) {
+      const li = document.createElement("li");
+      li.className = "card";
+      const cls = LEAGUE_CLASS[c.league] || "l1";
+      const metaParts = [c.city, c.stadium, c.founded ? "gegr. " + c.founded : null].filter(Boolean);
+      li.innerHTML = `
+        <div class="top">
+          <div>
+            <h3></h3>
+            <p class="meta"></p>
+          </div>
+          <span class="badge ${cls}">${c.league}</span>
+        </div>
+        <div class="actions">
+          <button class="edit">Bearbeiten</button>
+          <button class="del">Löschen</button>
+        </div>`;
+      li.querySelector("h3").textContent = c.name;
+      li.querySelector(".meta").textContent = metaParts.join(" · ") || "Keine weiteren Angaben";
+      li.querySelector(".edit").onclick = () => openSheet(c);
+      li.querySelector(".del").onclick = () => removeClub(c);
+      listEl.appendChild(li);
+    }
+  }
+
+  // --- Filter ---
+  document.getElementById("filters").addEventListener("click", (e) => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    currentLeague = btn.dataset.league;
+    for (const b of document.querySelectorAll("#filters button"))
+      b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+    loadClubs();
+  });
+
+  // --- Sheet öffnen/schließen ---
+  function openSheet(club) {
+    document.getElementById("sheetTitle").textContent = club ? "Verein bearbeiten" : "Verein hinzufügen";
+    document.getElementById("f-id").value = club ? club.id : "";
+    document.getElementById("f-name").value = club ? club.name : "";
+    document.getElementById("f-league").value = club ? club.league : "Bundesliga";
+    document.getElementById("f-city").value = club && club.city ? club.city : "";
+    document.getElementById("f-stadium").value = club && club.stadium ? club.stadium : "";
+    document.getElementById("f-founded").value = club && club.founded ? club.founded : "";
+    sheetBg.classList.add("open");
+  }
+  function closeSheet() { sheetBg.classList.remove("open"); }
+
+  document.getElementById("addBtn").onclick = () => openSheet(null);
+  document.getElementById("cancelBtn").onclick = closeSheet;
+  sheetBg.onclick = (e) => { if (e.target === sheetBg) closeSheet(); };
+
+  // --- Speichern (POST bei neu, PUT bei vorhandener id) ---
+  document.getElementById("saveBtn").onclick = async () => {
+    const id = document.getElementById("f-id").value;
+    const name = document.getElementById("f-name").value.trim();
+    if (!name) { toast("Bitte einen Namen eingeben."); return; }
+    const foundedRaw = document.getElementById("f-founded").value.trim();
+    const body = {
+      name,
+      league: document.getElementById("f-league").value,
+      city: document.getElementById("f-city").value.trim() || null,
+      stadium: document.getElementById("f-stadium").value.trim() || null,
+      founded: foundedRaw ? Number(foundedRaw) : null,
+    };
+    const method = id ? "PUT" : "POST";
+    const url = API + "/clubs" + (id ? "/" + id : "");
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(res.status);
+      closeSheet();
+      toast(id ? "Gespeichert." : "Verein angelegt.");
+      loadClubs();
+    } catch (e) {
+      toast("Speichern fehlgeschlagen (" + e.message + ").");
+    }
+  };
+
+  // --- Löschen (DELETE) ---
+  async function removeClub(club) {
+    if (!confirm(`„${club.name}" wirklich löschen?`)) return;
+    try {
+      const res = await fetch(API + "/clubs/" + club.id, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error(res.status);
+      toast("Gelöscht.");
+      loadClubs();
+    } catch (e) {
+      toast("Löschen fehlgeschlagen (" + e.message + ").");
+    }
+  }
+
+  loadClubs();
+</script>
+</body>
+</html>

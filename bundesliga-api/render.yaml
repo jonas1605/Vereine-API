@@ -1,0 +1,9 @@
+# Konfiguration für Render.com – damit wird beim Verbinden des GitHub-Repos
+# alles automatisch erkannt (kein manuelles Eintragen der Befehle nötig).
+services:
+  - type: web
+    name: bundesliga-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT

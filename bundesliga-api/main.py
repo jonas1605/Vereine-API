@@ -15,7 +15,7 @@ Skript erneut laufen lassen (oder die Vereine fest in main.py eintragen).
 
 import requests
 
-BASE_URL = "https://DEINE-URL.onrender.com"   # <-- hier anpassen!
+BASE_URL = "https://vereine-api.onrender.com"   # <-- hier anpassen!
 WIPE_FIRST = False                            # True = vorher alles löschen
 
 CLUBS = [
